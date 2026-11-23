@@ -37,6 +37,7 @@
 //#include "roach.h"
 //#include "RoachFrameworkEvents.h"
 #include <stdio.h>
+#include "sensor.h"
 
 
 /*******************************************************************************
@@ -60,12 +61,18 @@
 
 typedef enum {
     InitPState,
-    FirstState,
+    RUNNING,
+    ALLIGNING_REAR_DRIVE,
+    ALLIGNING_TURN_RIGHT,
+    ON_TAPE,
 } TemplateFSMState_t;
 
 static const char *StateNames[] = {
 	"InitPState",
-	"FirstState",
+	"RUNNING",
+    "ALLIGNING_REAR_DRIVE",
+    "ALLIGNING_TURN_RIGHT",
+    "ON_TAPE",
 };
 
 
@@ -89,6 +96,12 @@ static uint8_t MyPriority;
  * @author J. Edward Carryer, 2011.10.23 19:25 */
 uint8_t InitTemplateFSM(uint8_t Priority)
 {
+    ES_Timer_InitTimer(REAR_TIMER, 500);
+    ES_Timer_StopTimer(REAR_TIMER);
+
+    ES_Timer_InitTimer(TURN_TIMER, 500);
+    ES_Timer_StopTimer(TURN_TIMER);
+
     MyPriority = Priority;
     // put us into the Initial PseudoState
     CurrentState = InitPState;
@@ -132,23 +145,115 @@ ES_Event RunTemplateFSM(ES_Event ThisEvent)
     TemplateFSMState_t nextState; // <- need to change enum type here
 
     ES_Tattle(); // trace call stack
+    
+switch (CurrentState) {
 
-    switch (CurrentState) {
-    case InitPState: // If current state is initial Psedudo State
-        if (ThisEvent.EventType == ES_INIT)// only respond to ES_Init
-        {
-            // this is where you would put any actions associated with the
-            // transition from the initial pseudo-state into the actual
-            // initial state
-
-            // now put the machine into the actual initial state
-            nextState = FirstState;
+    case InitPState:
+        if (ThisEvent.EventType == ES_INIT) {
+            nextState = RUNNING;
             makeTransition = TRUE;
             ThisEvent.EventType = ES_NO_EVENT;
         }
         break;
 
-    case FirstState: // in the first state, replace this with appropriate state
+    
+    case RUNNING:
+        if (ThisEvent.EventType == ES_ENTRY) {
+            Motor_Control(FRONT_DRIVE, 700);
+        }
+
+        else if (ThisEvent.EventType == CHECK_IR_PATTERN) {
+            uint8_t center = (ThisEvent.EventParam >> 5) & 1; 
+            uint8_t back   = (ThisEvent.EventParam >> 3) & 1;
+
+            if (center == 1 && back == 0) {
+                nextState = ALLIGNING_REAR_DRIVE;
+                makeTransition = TRUE;
+                ThisEvent.EventType = ES_NO_EVENT;
+            }
+        }
+        break;
+
+
+    case ALLIGNING_REAR_DRIVE:
+        if (ThisEvent.EventType == ES_ENTRY) {
+            Motor_Control(REAR_DRIVE, 700);
+            ES_Timer_InitTimer(REAR_TIMER, 150);
+        }
+
+        else if (ThisEvent.EventType == CHECK_IR_PATTERN) {
+            uint8_t back = (ThisEvent.EventParam >> 3) & 1;
+
+            if (back == 1) {
+                nextState = ALLIGNING_TURN_RIGHT;
+                makeTransition = TRUE;
+                ThisEvent.EventType = ES_NO_EVENT;
+            }
+        }
+
+        else if (ThisEvent.EventType == ES_TIMEOUT &&
+                 ThisEvent.EventParam == REAR_TIMER) {
+            // Safety timeout
+            nextState = ALLIGNING_TURN_RIGHT;
+            makeTransition = TRUE;
+            ThisEvent.EventType = ES_NO_EVENT;
+        }
+
+        else if (ThisEvent.EventType == ES_EXIT) {
+            ES_Timer_StopTimer(REAR_TIMER);
+        }
+        break;
+
+
+    case ALLIGNING_TURN_RIGHT:
+        if (ThisEvent.EventType == ES_ENTRY) {
+            Motor_Control(TURN_RIGHT, 700);
+            ES_Timer_InitTimer(TURN_TIMER, 150);
+        }
+
+        else if (ThisEvent.EventType == CHECK_IR_PATTERN) {
+            uint8_t center = (ThisEvent.EventParam >> 5) & 1;
+            uint8_t back  = (ThisEvent.EventParam >> 3) & 1;
+
+            if (center == 1 && back == 1) {
+                nextState = ON_TAPE;
+                makeTransition = TRUE;
+                ThisEvent.EventType = ES_NO_EVENT;
+            }
+        }
+
+        else if (ThisEvent.EventType == ES_TIMEOUT &&
+                 ThisEvent.EventParam == TURN_TIMER) {
+            nextState = RUNNING;
+            makeTransition = TRUE;
+            ThisEvent.EventType = ES_NO_EVENT;
+        }
+
+        else if (ThisEvent.EventType == ES_EXIT) {
+            ES_Timer_StopTimer(TURN_TIMER);
+        }
+        break;
+        
+    case ON_TAPE:
+        if (ThisEvent.EventType == ES_ENTRY) {
+            Motor_Control(FRONT_DRIVE, 700);
+        }
+
+        else if (ThisEvent.EventType == CHECK_IR_PATTERN) {
+            uint8_t left   = (ThisEvent.EventParam >> 6) & 1;
+            uint8_t center = (ThisEvent.EventParam >> 5) & 1;
+            uint8_t right  = (ThisEvent.EventParam >> 4) & 1;
+
+            if (left == 1 && right == 0) {
+                Motor_Control(TURN_RIGHT, 600);
+            }
+            else if (right == 1 && left == 0) {
+                Motor_Control(TURN_LEFT, 600);
+            }
+            else if (center == 1) {
+                Motor_Control(FRONT_DRIVE, 700);
+            }
+        }
         break;
 
     default: // all unhandled states fall into here
@@ -160,7 +265,7 @@ ES_Event RunTemplateFSM(ES_Event ThisEvent)
         CurrentState = nextState;
         RunTemplateFSM(ENTRY_EVENT);
     }
-    ES_Tail(); // trace call stack end
+   ES_Tail(); // trace call stack end
     return ThisEvent;
 }
 

@@ -31,11 +31,13 @@
 #include "ES_Events.h"
 #include "serial.h"
 #include "AD.h"
+#include <stdio.h>
+#include "sensor.h"
 
 /*******************************************************************************
  * MODULE #DEFINES                                                             *
  ******************************************************************************/
-#define BATTERY_DISCONNECT_THRESHOLD 175
+//#define BATTERY_DISCONNECT_THRESHOLD 175
 
 /*******************************************************************************
  * EVENTCHECKER_TEST SPECIFIC CODE                                                             *
@@ -82,30 +84,99 @@ static ES_Event storedEvent;
  * @note Use this code as a template for your other event checkers, and modify as necessary.
  * @author Gabriel H Elkaim, 2013.09.27 09:18
  * @modified Gabriel H Elkaim/Max Dunne, 2016.09.12 20:08 */
-uint8_t TemplateCheckBattery(void) {
-    static ES_EventTyp_t lastEvent = BATTERY_DISCONNECTED;
-    ES_EventTyp_t curEvent;
-    ES_Event thisEvent;
-    uint8_t returnVal = FALSE;
-    uint16_t batVoltage = AD_ReadADPin(BAT_VOLTAGE); // read the battery voltage
+// uint8_t TemplateCheckBattery(void) {
+//     static ES_EventTyp_t lastEvent = BATTERY_DISCONNECTED;
+//     ES_EventTyp_t curEvent;
+//     ES_Event thisEvent;
+//     uint8_t returnVal = FALSE;
+//     uint16_t batVoltage = AD_ReadADPin(BAT_VOLTAGE); // read the battery voltage
+    
+// //    printf("TemplateCheckBattery works");
 
-    if (batVoltage > BATTERY_DISCONNECT_THRESHOLD) { // is battery connected?
-        curEvent = BATTERY_CONNECTED;
-    } else {
-        curEvent = BATTERY_DISCONNECTED;
+//     if (batVoltage > BATTERY_DISCONNECT_THRESHOLD) { // is battery connected?
+//         curEvent = BATTERY_CONNECTED;
+//     } else {
+//         curEvent = BATTERY_DISCONNECTED;
+//     }
+//     if (curEvent != lastEvent) { // check for change from last time
+//         thisEvent.EventType = curEvent;
+//         thisEvent.EventParam = batVoltage;
+//         returnVal = TRUE;
+//         lastEvent = curEvent; // update history
+// #ifndef EVENTCHECKER_TEST           // keep this as is for test harness
+//         PostTemplateFSM(thisEvent);
+// #else
+//         SaveEvent(thisEvent);
+// #endif   
+//     }
+//     return (returnVal);
+// }
+
+#define IR_DEBOUNCE_MS 30
+
+uint8_t CheckIRPattern(void)
+{
+    static uint16_t last_raw_pattern = 0;
+    static uint16_t stable_pattern = 0;
+    static uint32_t last_change_time = 0;
+    static uint8_t initialized = FALSE;
+
+    uint16_t pattern = 0;
+    uint32_t current_time = ES_Timer_GetTime();
+
+    uint8_t returnVal = FALSE;
+
+    // Read all 8 IR sensors
+    pattern = Read_IR_Tape_Sensor(IR_FRONT) << 7;
+    pattern |= Read_IR_Tape_Sensor(IR_LEFT) << 6;
+    pattern |= Read_IR_Tape_Sensor(IR_CENTER) << 5;
+    pattern |= Read_IR_Tape_Sensor(IR_RIGHT) << 4;
+    pattern |= Read_IR_Tape_Sensor(IR_BACK) << 3;
+    pattern |= Read_IR_Tape_Sensor(IR_SIDE_ONE) << 2;
+    pattern |= Read_IR_Tape_Sensor(IR_SIDE_TWO) << 1;
+    pattern |= Read_IR_Tape_Sensor(IR_SIDE_THREE);
+    
+//    printf("IR Pattern: %u %u %u %u %u %u %u %u\r\n",
+//   (pattern >> 7) & 1,
+//   (pattern >> 6) & 1,
+//   (pattern >> 5) & 1, // tape(dark) is 1, field(white) is 0
+//   (pattern >> 4) & 1,
+//   (pattern >> 3) & 1,
+//   (pattern >> 2) & 1,
+//   (pattern >> 1) & 1,
+//   (pattern >> 0) & 1);
+
+    // Initialize without generating an event
+    if (initialized == FALSE) {
+        last_raw_pattern = pattern;
+        stable_pattern = pattern;
+        last_change_time = current_time;
+        initialized = TRUE;
+        return FALSE;
     }
-    if (curEvent != lastEvent) { // check for change from last time
-        thisEvent.EventType = curEvent;
-        thisEvent.EventParam = batVoltage;
-        returnVal = TRUE;
-        lastEvent = curEvent; // update history
-#ifndef EVENTCHECKER_TEST           // keep this as is for test harness
-        PostGenericService(thisEvent);
-#else
-        SaveEvent(thisEvent);
-#endif   
+
+    // Detect raw pattern changes
+    if (pattern != last_raw_pattern) {
+        last_raw_pattern = pattern;
+        last_change_time = current_time;
     }
-    return (returnVal);
+
+    // Generate event only after pattern is stable
+    if ((uint32_t)(current_time - last_change_time) >= IR_DEBOUNCE_MS) {
+
+        if (pattern != stable_pattern) {
+            ES_Event thisEvent;
+
+            stable_pattern = pattern;
+
+            thisEvent.EventType = CHECK_IR_PATTERN;
+            thisEvent.EventParam = stable_pattern;
+
+            returnVal = PostTemplateFSM(thisEvent);
+        }
+    }
+
+    return returnVal;
 }
 
 /* 
@@ -129,36 +200,36 @@ uint8_t TemplateCheckBattery(void) {
  * defined in the project, no changes are necessary for your event checkers to work
  * with your other projects.
  */
-#ifdef EVENTCHECKER_TEST
-#include <stdio.h>
-static uint8_t(*EventList[])(void) = {EVENT_CHECK_LIST};
-
-void PrintEvent(void);
-
-void main(void) {
-    BOARD_Init();
-    /* user initialization code goes here */
-
-    // Do not alter anything below this line
-    int i;
-
-    printf("\r\nEvent checking test harness for %s", __FILE__);
-
-    while (1) {
-        if (IsTransmitEmpty()) {
-            for (i = 0; i< sizeof (EventList) >> 2; i++) {
-                if (EventList[i]() == TRUE) {
-                    PrintEvent();
-                    break;
-                }
-
-            }
-        }
-    }
-}
-
-void PrintEvent(void) {
-    printf("\r\nFunc: %s\tEvent: %s\tParam: 0x%X", eventName,
-            EventNames[storedEvent.EventType], storedEvent.EventParam);
-}
-#endif
+//#ifdef EVENTCHECKER_TEST
+//#include <stdio.h>
+//static uint8_t(*EventList[])(void) = {EVENT_CHECK_LIST};
+//
+//void PrintEvent(void);
+//
+//void main(void) {
+//    BOARD_Init();
+//    /* user initialization code goes here */
+//
+//    // Do not alter anything below this line
+//    int i;
+//
+//    printf("\r\nEvent checking test harness for %s", __FILE__);
+//
+//    while (1) {
+//        if (IsTransmitEmpty()) {
+//            for (i = 0; i< sizeof (EventList) >> 2; i++) {
+//                if (EventList[i]() == TRUE) {
+//                    PrintEvent();
+//                    break;
+//                }
+//
+//            }
+//        }
+//    }
+//}
+//
+//void PrintEvent(void) {
+//    printf("\r\nFunc: %s\tEvent: %s\tParam: 0x%X", eventName,
+//            EventNames[storedEvent.EventType], storedEvent.EventParam);
+//}
+//#endif

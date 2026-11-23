@@ -3,12 +3,17 @@
 #include <stdio.h>
 #include "ES_Configure.h"
 #include "ES_Framework.h"
+#include "pwm.h"
 
 void main(void)
 {
     ES_Return_t ErrorType;
 
     BOARD_Init();
+    PWM_Init();
+    Motor_Init();
+    Bumper_Sensor_Init();
+    IR_Tape_Sensor_Init();
 
     printf("Starting ES Framework Template\r\n");
     printf("using the 2nd Generation Events & Services Framework\r\n");
