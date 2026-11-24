@@ -43,11 +43,17 @@ void IR_Tape_Sensor_Init(void)
 // Motor Control
 // ==========================================
 
+#define LEFT_MOTOR_SCALE  (7.15f / 8.0f)
+#define DIFFERENTIAL_SCALE 0.8f
+
 void Motor_Control(MotorState state, unsigned int motor_speed)
 {
+    unsigned int left_speed = motor_speed;
+    unsigned int right_speed = motor_speed;
+
     switch (state)
     {
-        case FRONT_DRIVE:
+        case FORWARD_DRIVE:
             IO_PortsWritePort(MOTOR_PORT, IN1 | IN3);
             break;
 
@@ -63,6 +69,16 @@ void Motor_Control(MotorState state, unsigned int motor_speed)
             IO_PortsWritePort(MOTOR_PORT, IN1 | IN4);
             break;
 
+        case DIFFERENTIAL_LEFT_DRIVE:
+            IO_PortsWritePort(MOTOR_PORT, IN1 | IN3);
+            left_speed = motor_speed * DIFFERENTIAL_SCALE;
+            break;
+
+        case DIFFERENTIAL_RIGHT_DRIVE:
+            IO_PortsWritePort(MOTOR_PORT, IN1 | IN3);
+            right_speed = motor_speed * DIFFERENTIAL_SCALE;
+            break;
+
         case STOP:
         default:
             PWM_SetDutyCycle(LEFT_PWM, 0);
@@ -71,8 +87,12 @@ void Motor_Control(MotorState state, unsigned int motor_speed)
             return;
     }
 
-    PWM_SetDutyCycle(LEFT_PWM, motor_speed);
-    PWM_SetDutyCycle(RIGHT_PWM, motor_speed);
+    // Left motor calibration
+    left_speed = left_speed * LEFT_MOTOR_SCALE;
+
+    // Apply PWM duty cycles
+    PWM_SetDutyCycle(LEFT_PWM, left_speed);
+    PWM_SetDutyCycle(RIGHT_PWM, right_speed);
 }
 
 // ==========================================

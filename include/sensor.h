@@ -42,10 +42,12 @@
 // Motor States
 typedef enum {
     STOP,
-    FRONT_DRIVE,
+    FORWARD_DRIVE,
     REAR_DRIVE,
     TURN_LEFT,
-    TURN_RIGHT
+    TURN_RIGHT,
+    DIFFERENTIAL_LEFT_DRIVE,
+    DIFFERENTIAL_RIGHT_DRIVE
 } MotorState;
 
 // Bumper States
