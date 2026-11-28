@@ -62,21 +62,26 @@
 typedef enum {
     InitPState,
     RUNNING,
-    TURNING,
+    ALLIGNING,
     ON_TAPE,
+    TURNING,
+    CORRECTING_LEFT,
+    CORRECTING_RIGHT,
 } TemplateFSMState_t;
 
 static const char *StateNames[] = {
-	"InitPState",
-	"RUNNING",
-    "TURNING",
+    "InitPState",
+    "RUNNING",
+    "ALLIGNING",
     "ON_TAPE",
+    "TURNING",
+    "CORRECTING_LEFT",
+    "CORRECTING_RIGHT",
 };
 
 
 static TemplateFSMState_t CurrentState = InitPState; // <- change enum name to match ENUM
 static uint8_t MyPriority;
-static uint8_t flag = 0;
 
 
 /*******************************************************************************
@@ -95,8 +100,12 @@ static uint8_t flag = 0;
  * @author J. Edward Carryer, 2011.10.23 19:25 */
 uint8_t InitTemplateFSM(uint8_t Priority)
 {
-    ES_Timer_InitTimer(TURN_TIMER, 150);
+    ES_Timer_InitTimer(ALLIGN_TIMER, 1000);
+    ES_Timer_StopTimer(ALLIGN_TIMER);
+    ES_Timer_InitTimer(TURN_TIMER, 1000);
     ES_Timer_StopTimer(TURN_TIMER);
+    ES_Timer_InitTimer(CORRECTING_TIMER, 1000);
+    ES_Timer_StopTimer(CORRECTING_TIMER);
 
     MyPriority = Priority;
     // put us into the Initial PseudoState
@@ -155,21 +164,23 @@ switch (CurrentState) {
     
     case RUNNING:
         if (ThisEvent.EventType == ES_ENTRY) {
-            Motor_Control(FORWARD_DRIVE, 700);
+            Motor_Control(FORWARD_DRIVE, 650);
         }
 
         else if (ThisEvent.EventType == CHECK_IR_PATTERN) {
-            uint8_t front = (ThisEvent.EventParam >> 7) & 1; 
-            uint8_t center = (ThisEvent.EventParam >> 5) & 1; 
-            uint8_t back   = (ThisEvent.EventParam >> 3) & 1;
+            uint8_t front_left = (ThisEvent.EventParam >> 7) & 1;
+            uint8_t front = (ThisEvent.EventParam >> 6) & 1; 
+            uint8_t front_right = (ThisEvent.EventParam >> 5) & 1; 
+            uint8_t center = (ThisEvent.EventParam >> 4) & 1; 
+            uint8_t right = (ThisEvent.EventParam >> 3) & 1; 
+            uint8_t back   = (ThisEvent.EventParam >> 2) & 1;
 
-            if (front == 0 && center == 1 && back == 0) {
-                nextState = TURNING;
+            if (front == 0 && center == 1) {
+                nextState = ALLIGNING;
                 makeTransition = TRUE;
                 ThisEvent.EventType = ES_NO_EVENT;
             }
-
-            else if (front == 1 && center == 1 && back == 1) {
+            else if (center == 1 && back == 1) {
                 nextState = ON_TAPE;
                 makeTransition = TRUE;
                 ThisEvent.EventType = ES_NO_EVENT;
@@ -178,58 +189,130 @@ switch (CurrentState) {
         break;
 
 
-    case TURNING:
+    case ALLIGNING:
         if (ThisEvent.EventType == ES_ENTRY) {
-            Motor_Control(TURN_RIGHT, 700);
+            Motor_Control(TURN_RIGHT, 650);
         }
 
         else if (ThisEvent.EventType == CHECK_IR_PATTERN) {
-            uint8_t front = (ThisEvent.EventParam >> 7) & 1; 
-            uint8_t center = (ThisEvent.EventParam >> 5) & 1; 
-            uint8_t back   = (ThisEvent.EventParam >> 3) & 1;
-            if (front == 1 && center == 1 && back == 1) {
-                ES_Timer_InitTimer(TURN_TIMER, 150);
-                flag = 1;
+            uint8_t front_left = (ThisEvent.EventParam >> 7) & 1;
+            uint8_t front = (ThisEvent.EventParam >> 6) & 1; 
+            uint8_t front_right = (ThisEvent.EventParam >> 5) & 1; 
+            uint8_t center = (ThisEvent.EventParam >> 4) & 1; 
+            uint8_t right = (ThisEvent.EventParam >> 3) & 1; 
+            uint8_t back   = (ThisEvent.EventParam >> 2) & 1;
+            if (front == 1 && center == 1) { 
+                nextState = ON_TAPE;
+                makeTransition = TRUE;
+                ThisEvent.EventType = ES_NO_EVENT;
             }
-        }
-        
-        else if (ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == TURN_TIMER) {
-            nextState = ON_TAPE;
-            makeTransition = TRUE;
-            ThisEvent.EventType = ES_NO_EVENT;
-        }
-        else if (ThisEvent.EventType == ES_EXIT) {
-            ES_Timer_StopTimer(TURN_TIMER);
         }
         break;
         
     case ON_TAPE:
+
+    if (ThisEvent.EventType == ES_ENTRY) {
+        Motor_Control(FORWARD_DRIVE, 650);
+    }
+
+    else if (ThisEvent.EventType == CHECK_IR_PATTERN) {
+
+        uint8_t front_left = (ThisEvent.EventParam >> 7) & 1;
+        uint8_t front = (ThisEvent.EventParam >> 6) & 1; 
+        uint8_t front_right = (ThisEvent.EventParam >> 5) & 1; 
+        uint8_t center = (ThisEvent.EventParam >> 4) & 1; 
+        uint8_t right = (ThisEvent.EventParam >> 3) & 1; 
+        uint8_t back   = (ThisEvent.EventParam >> 2) & 1;
+
+        // Detect right corner
+        if (front_left == 0 && front == 0 && front_right == 0 && center == 1 && right == 1 && back == 1) {
+            nextState = TURNING;
+            makeTransition = TRUE;
+            ThisEvent.EventType = ES_NO_EVENT;            
+        }
+
+        else if (front_left == 0 && front == 1 && front_right == 1) {
+            nextState = CORRECTING_RIGHT; // correcting to right
+            makeTransition = TRUE;
+            ThisEvent.EventType = ES_NO_EVENT;
+        }
+
+        else if (front_left == 1 && front == 1 && front_right == 0) {
+            nextState = CORRECTING_LEFT; // correcting to left
+            makeTransition = TRUE;
+            ThisEvent.EventType = ES_NO_EVENT;
+        }
+        
+        else if (front_left == 0 && front == 0 && front_right == 0 && center == 0 && right == 0 && back == 0) {
+            nextState = RUNNING; // correcting to left
+            makeTransition = TRUE;
+            ThisEvent.EventType = ES_NO_EVENT;
+        }
+    }
+    break;
+        
+    case TURNING:
         if (ThisEvent.EventType == ES_ENTRY) {
-            Motor_Control(FORWARD_DRIVE, 700);
+            Motor_Control(TURN_RIGHT, 650);
         }
 
         else if (ThisEvent.EventType == CHECK_IR_PATTERN) {
-            uint8_t left   = (ThisEvent.EventParam >> 6) & 1;
-            uint8_t center = (ThisEvent.EventParam >> 5) & 1;
-            uint8_t right  = (ThisEvent.EventParam >> 4) & 1;
-            uint8_t back  = (ThisEvent.EventParam >> 3) & 1;
-
-            if (center == 1) {
-                Motor_Control(FORWARD_DRIVE, 700);
+            uint8_t front_left = (ThisEvent.EventParam >> 7) & 1;
+            uint8_t front = (ThisEvent.EventParam >> 6) & 1; 
+            uint8_t front_right = (ThisEvent.EventParam >> 5) & 1; 
+            uint8_t center = (ThisEvent.EventParam >> 4) & 1; 
+            uint8_t right = (ThisEvent.EventParam >> 3) & 1; 
+            uint8_t back   = (ThisEvent.EventParam >> 2) & 1;
+            if (front == 1) {
+                nextState = ON_TAPE;
+                makeTransition = TRUE;
+                ThisEvent.EventType = ES_NO_EVENT;
             }
-//            else if (left == 1) {
-//                Motor_Control(DIFFERENTIAL_LEFT_DRIVE, 700);
-//            }
-//            else if (right == 1) {
-//                Motor_Control(DIFFERENTIAL_RIGHT_DRIVE, 700);
-//            }
-//            else {
-//                Motor_Control(STOP, 0);
-//            }
+        }
+        
+//        else if (ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == TURN_TIMER) {
+//            nextState = RUNNING;
+//            makeTransition = TRUE;
+//            ThisEvent.EventType = ES_NO_EVENT;
+//        }
+//        else if (ThisEvent.EventType == ES_EXIT) {
+//            ES_Timer_StopTimer(TURN_TIMER);
+//        }
+        break;
+        
+    case CORRECTING_RIGHT:
+        if (ThisEvent.EventType == ES_ENTRY) {
+            Motor_Control(TURN_RIGHT, 650);
+            ES_Timer_InitTimer(CORRECTING_TIMER, 100);
+        }
 
+        else if (ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == CORRECTING_TIMER) {
+            nextState = ON_TAPE;
+            makeTransition = TRUE;
             ThisEvent.EventType = ES_NO_EVENT;
         }
-        break;
+        
+        else if (ThisEvent.EventType == ES_EXIT) {
+            ES_Timer_StopTimer(CORRECTING_TIMER);
+        }
+    break;
+        
+    case CORRECTING_LEFT:
+        if (ThisEvent.EventType == ES_ENTRY) {
+            Motor_Control(TURN_LEFT, 650);
+            ES_Timer_InitTimer(CORRECTING_TIMER, 100);
+        }
+
+        else if (ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == CORRECTING_TIMER) {
+            nextState = ON_TAPE;
+            makeTransition = TRUE;
+            ThisEvent.EventType = ES_NO_EVENT;
+        }
+
+        else if (ThisEvent.EventType == ES_EXIT) {
+            ES_Timer_StopTimer(CORRECTING_TIMER);
+        }
+    break;
 
     default: // all unhandled states fall into here
         break;

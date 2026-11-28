@@ -127,14 +127,14 @@ uint8_t CheckIRPattern(void)
     uint8_t returnVal = FALSE;
 
     // Read all 8 IR sensors
-    pattern = Read_IR_Tape_Sensor(IR_FRONT) << 7;
-    pattern |= Read_IR_Tape_Sensor(IR_LEFT) << 6;
-    pattern |= Read_IR_Tape_Sensor(IR_CENTER) << 5;
-    pattern |= Read_IR_Tape_Sensor(IR_RIGHT) << 4;
-    pattern |= Read_IR_Tape_Sensor(IR_BACK) << 3;
-    pattern |= Read_IR_Tape_Sensor(IR_SIDE_ONE) << 2;
-    pattern |= Read_IR_Tape_Sensor(IR_SIDE_TWO) << 1;
-    pattern |= Read_IR_Tape_Sensor(IR_SIDE_THREE);
+    pattern = Read_IR_Tape_Sensor(IR_FRONT_LEFT) << 7;
+    pattern |= Read_IR_Tape_Sensor(IR_FRONT) << 6;
+    pattern |= Read_IR_Tape_Sensor(IR_FRONT_RIGHT) << 5;
+    pattern |= Read_IR_Tape_Sensor(IR_CENTER) << 4;
+    pattern |= Read_IR_Tape_Sensor(IR_RIGHT) << 3;
+    pattern |= Read_IR_Tape_Sensor(IR_BACK) << 2;
+//    pattern |= Read_IR_Tape_Sensor(IR_SIDE_TWO) << 1;
+//    pattern |= Read_IR_Tape_Sensor(IR_SIDE_THREE);
     
 //    printf("IR Pattern: %u %u %u %u %u %u %u %u\r\n",
 //   (pattern >> 7) & 1,

@@ -28,16 +28,29 @@
 #define BACK_IR_PORT  PORTW
 
 // PORTV
-#define FRONT_IR  PIN5
-#define LEFT_IR   PIN6
-#define CENTER_IR PIN7
-#define RIGHT_IR  PIN8
+#define FRONT_LEFT_IR  PIN5
+#define FRONT_IR   PIN6
+#define FRONT_RIGHT_IR PIN7
+#define CENTER_IR   PIN8
 
 // PORTW
-#define BACK_IR       PIN3
-#define SIDE_ONE_IR   PIN4
+#define RIGHT_IR       PIN3
+#define BACK_IR   PIN4
 #define SIDE_TWO_IR   PIN5
 #define SIDE_THREE_IR PIN6
+
+// Shooting Pins
+#define FLYWHEEL_PORT PORTZ
+#define FLYWHEEL_PIN  PIN3
+
+#define SERVO_PORT    PORTZ
+#define SERVO_PIN     PIN4
+
+// Servo Parameters
+#define SERVO_PERIOD_US  20000
+#define SERVO_MIN_US      1000
+#define SERVO_CENTER_US   1500
+#define SERVO_MAX_US      2000
 
 // Motor States
 typedef enum {
@@ -58,12 +71,12 @@ typedef enum {
 
 // IR Tape Sensor States
 typedef enum {
+    IR_FRONT_LEFT,
     IR_FRONT,
-    IR_LEFT,
+    IR_FRONT_RIGHT,
     IR_CENTER,
     IR_RIGHT,
     IR_BACK,
-    IR_SIDE_ONE,
     IR_SIDE_TWO,
     IR_SIDE_THREE
 } IrTapeSensorEnum;
@@ -79,5 +92,9 @@ void Motor_Control(MotorState state, unsigned int motor_speed);
 // Sensor Reading
 bool Read_Bumper(BumperEnum bumper_enum);
 bool Read_IR_Tape_Sensor(IrTapeSensorEnum ir_enum);
+
+void GPIO_Test_Init();
+void GPIO_SetHigh();
+void GPIO_SetLow();
 
 #endif

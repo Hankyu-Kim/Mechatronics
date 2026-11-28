@@ -30,12 +30,12 @@ void IR_Tape_Sensor_Init(void)
 {
     IO_PortsSetPortInputs(
         FRONT_IR_PORT,
-        FRONT_IR | LEFT_IR | CENTER_IR | RIGHT_IR
+        FRONT_LEFT_IR | FRONT_IR | FRONT_RIGHT_IR | CENTER_IR
     );
 
     IO_PortsSetPortInputs(
         BACK_IR_PORT,
-        BACK_IR | SIDE_ONE_IR | SIDE_TWO_IR | SIDE_THREE_IR
+        RIGHT_IR | CENTER_IR | SIDE_TWO_IR | SIDE_THREE_IR
     );
 }
 
@@ -43,7 +43,7 @@ void IR_Tape_Sensor_Init(void)
 // Motor Control
 // ==========================================
 
-#define LEFT_MOTOR_SCALE  (7.15f / 8.0f)
+#define LEFT_MOTOR_SCALE  (7.5f / 8.0f)
 #define DIFFERENTIAL_SCALE 0.8f
 
 void Motor_Control(MotorState state, unsigned int motor_speed)
@@ -126,14 +126,19 @@ bool Read_IR_Tape_Sensor(IrTapeSensorEnum ir_enum)
 
     switch (ir_enum)
     {
+        case IR_FRONT_LEFT:
+            read_port = FRONT_IR_PORT;
+            read_pin = FRONT_LEFT_IR;
+            break;
+            
         case IR_FRONT:
             read_port = FRONT_IR_PORT;
             read_pin = FRONT_IR;
             break;
-
-        case IR_LEFT:
+            
+        case IR_FRONT_RIGHT:
             read_port = FRONT_IR_PORT;
-            read_pin = LEFT_IR;
+            read_pin = FRONT_RIGHT_IR;
             break;
 
         case IR_CENTER:
@@ -142,18 +147,13 @@ bool Read_IR_Tape_Sensor(IrTapeSensorEnum ir_enum)
             break;
 
         case IR_RIGHT:
-            read_port = FRONT_IR_PORT;
+            read_port = BACK_IR_PORT;
             read_pin = RIGHT_IR;
             break;
 
         case IR_BACK:
             read_port = BACK_IR_PORT;
             read_pin = BACK_IR;
-            break;
-
-        case IR_SIDE_ONE:
-            read_port = BACK_IR_PORT;
-            read_pin = SIDE_ONE_IR;
             break;
 
         case IR_SIDE_TWO:
@@ -173,4 +173,24 @@ bool Read_IR_Tape_Sensor(IrTapeSensorEnum ir_enum)
     unsigned int data = IO_PortsReadPort(read_port);
 
     return ((data & read_pin) != 0);
+}
+
+// ==========================================
+// GPIO Output Test
+// ==========================================
+
+void GPIO_Test_Init()
+{
+    IO_PortsSetPortOutputs(FLYWHEEL_PORT, FLYWHEEL_PIN);
+    IO_PortsClearPortBits(FLYWHEEL_PORT, FLYWHEEL_PIN);
+}
+
+void GPIO_SetHigh()
+{
+    IO_PortsSetPortBits(FLYWHEEL_PORT, FLYWHEEL_PIN);
+}
+
+void GPIO_SetLow()
+{
+    IO_PortsClearPortBits(FLYWHEEL_PORT, FLYWHEEL_PIN);
 }
